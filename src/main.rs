@@ -1,8 +1,6 @@
+#[macro_use] extern crate diesel_migrations;
 mod logtimedb;
 
 fn main() {
-    match logtimedb::open() {
-        Ok(_) => {},
-        Err(err) =>{ eprintln!("{}", err); }
-    }
+    let database = logtimedb::open().unwrap();
 }
