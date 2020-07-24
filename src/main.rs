@@ -1,3 +1,8 @@
+mod logtimedb;
+
 fn main() {
-    println!("Hello, world!");
+    match logtimedb::open() {
+        Ok(_) => {},
+        Err(err) =>{ eprintln!("{}", err); }
+    }
 }
