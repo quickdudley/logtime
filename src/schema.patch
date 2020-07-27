@@ -35,7 +35,7 @@ index defc0d4..f956ec3 100644
          branch -> Nullable<Text>,
          description -> Nullable<Text>,
 -        active -> Integer,
-+        active -> BigInt,
++        active -> Bool,
      }
  }
  

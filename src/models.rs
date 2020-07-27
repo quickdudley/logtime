@@ -1,7 +1,5 @@
 use diesel::sqlite::SqliteConnection;
-use crate::diesel::QueryDsl;
-use crate::diesel::RunQueryDsl;
-use crate::diesel::ExpressionMethods;
+use diesel::{QueryDsl, RunQueryDsl, ExpressionMethods};
 
 #[derive(Queryable)]
 pub struct Project {
@@ -63,3 +61,42 @@ pub fn get_project<'a>(conn: &SqliteConnection, code: &'a str) -> Result<Project
     })
 }
 
+impl Project {
+    pub fn tasks(&self, conn: &SqliteConnection) -> Result<Vec<Task>, diesel::result::Error> {
+        use super::schema::tasks::dsl;
+        dsl::tasks.filter(dsl::project_id.eq(self.id))
+            .load::<Task>(conn)
+    }
+
+    pub fn task(&self, conn: &SqliteConnection, number: i64) -> Result<Task, diesel::result::Error> {
+        use super::schema::tasks::dsl;
+        dsl::tasks
+            .filter(dsl::project_id.eq(self.id))
+            .filter(dsl::number.eq(number))
+            .get_result::<Task>(conn)
+    }
+}
+
+impl Task {
+    pub fn subtasks(&self, conn: &SqliteConnection) -> Result<Vec<Subtask>, diesel::result::Error> {
+        use super::schema::subtasks::dsl;
+        dsl::subtasks.filter(dsl::task_id.eq(self.id))
+            .load::<Subtask>(conn)
+    }
+
+    pub fn active_subtask(&self, conn: &SqliteConnection) -> Result<Option<Subtask>, diesel::result::Error> {
+        match self.active_subtask {
+            None => Ok(None),
+            Some(number) => {
+                use super::schema::subtasks::dsl;
+                match dsl::subtasks.filter(dsl::task_id.eq(self.id))
+                    .filter(dsl::id.eq(number))
+                    .get_result::<Subtask>(conn) {
+                        Err(diesel::result::Error::NotFound) => Ok(None),
+                        Err(err) => Err(err),
+                        Ok(subtask) => Ok(Some(subtask)),
+                    }
+            }
+        }
+    }
+}

@@ -22,7 +22,7 @@ table! {
         task_id -> BigInt,
         branch -> Nullable<Text>,
         description -> Nullable<Text>,
-        active -> BigInt,
+        active -> Bool,
     }
 }
 
