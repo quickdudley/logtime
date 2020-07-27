@@ -1,5 +1,11 @@
+// use std::time::SystemTime;
+
 use diesel::sqlite::SqliteConnection;
 use diesel::{QueryDsl, RunQueryDsl, ExpressionMethods};
+use chrono::DateTime;
+use chrono::offset::TimeZone;
+use chrono_tz::Tz;
+use chrono_tz::Pacific::Auckland;
 
 #[derive(Queryable)]
 pub struct Project {
@@ -9,12 +15,24 @@ pub struct Project {
     pub name: Option<String>,
 }
 
-#[derive(Queryable)]
 pub struct Stretch {
     pub id: i64,
     pub subtask_id: i64,
-    pub start: i64,
-    pub end: Option<i64>,
+    pub start: DateTime<Tz>,
+    pub end: Option<DateTime<Tz>>,
+}
+
+impl diesel::deserialize::Queryable<super::schema::stretches::SqlType, diesel::sqlite::Sqlite> for Stretch {
+    type Row = (i64, i64, i64, Option<i64>);
+
+    fn build(row: Self::Row) -> Self {
+        Stretch {
+            id: row.0,
+            subtask_id: row.1,
+            start: Auckland.timestamp(row.2, 0),
+            end: row.3.map(|ts| Auckland.timestamp(ts, 0))
+        }
+    }
 }
 
 #[derive(Queryable)]
