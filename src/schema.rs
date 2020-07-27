@@ -1,6 +1,6 @@
 table! {
     projects (id) {
-        id -> Integer,
+        id -> BigInt,
         code -> Text,
         directory -> Nullable<Text>,
         name -> Nullable<Text>,
@@ -9,29 +9,29 @@ table! {
 
 table! {
     stretches (id) {
-        id -> Integer,
-        subtask_id -> Integer,
-        start -> Integer,
-        end -> Nullable<Integer>,
+        id -> BigInt,
+        subtask_id -> BigInt,
+        start -> BigInt,
+        end -> Nullable<BigInt>,
     }
 }
 
 table! {
     subtasks (id) {
-        id -> Integer,
-        task_id -> Integer,
+        id -> BigInt,
+        task_id -> BigInt,
         branch -> Nullable<Text>,
         description -> Nullable<Text>,
-        active -> Integer,
+        active -> BigInt,
     }
 }
 
 table! {
     tasks (id) {
-        id -> Integer,
-        project_id -> Integer,
-        number -> Integer,
-        active_subtask -> Nullable<Integer>,
+        id -> BigInt,
+        project_id -> BigInt,
+        number -> BigInt,
+        active_subtask -> Nullable<BigInt>,
     }
 }
 
