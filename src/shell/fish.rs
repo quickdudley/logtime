@@ -44,6 +44,11 @@ fn escape_string(raw: &str) -> String {
             need_complex_escape = true;
         } else {
             match i {
+                '\0' => {
+                    out.push_str("\\0");
+                    need_escape = true;
+                    need_complex_escape = true;
+                },
                 '\t' => {
                     out.push_str("\\t");
                     need_escape = true;
