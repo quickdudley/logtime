@@ -3,6 +3,7 @@
 mod schema;
 mod models;
 mod logtimedb;
+mod shell;
 
 fn main() {
     let database = logtimedb::open().unwrap();
