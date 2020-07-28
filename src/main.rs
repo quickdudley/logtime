@@ -6,5 +6,5 @@ mod logtimedb;
 mod shell;
 
 fn main() {
-    let database = logtimedb::open().unwrap();
+    let database = logtimedb::open_default().unwrap();
 }
