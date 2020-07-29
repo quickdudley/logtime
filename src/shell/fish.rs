@@ -8,14 +8,15 @@ impl<Output: Write> super::Shell for Fish<Output> {
     fn cd(&mut self, path: &std::path::Path) -> Result<(),std::io::Error> {
         write!(self.output, "cd '{}'\n", escape_string(path.display().to_string().as_str()))
     }
-    fn checkout(&mut self, branch: &str) -> Result<(),std::io::Error> {
-        write!(self.output, "git checkout {}\n", escape_string(branch))
+    fn cmd(&mut self, exe: &str, args: &Vec<String>) -> Result<(),std::io::Error> {
+        write!(self.output, "{}\n", std::iter::once(exe)
+               .chain(args.iter().map(|arg| arg.as_ref()))
+               .map(escape_string)
+               .collect::<Vec<_>>()
+               .join(" "))
     }
-    fn new_branch(&mut self, branch: &str, source: Option<&str>) -> Result<(),std::io::Error> {
-        match source {
-            None => write!(self.output, "git checkout -b {}\n", escape_string(branch)),
-            Some(source) => write!(self.output, "git checkout -b {} --no-track {}\n", escape_string(branch), escape_string(source)),
-        }
+    fn env(&mut self, key: &str, val: &str) -> Result<(),std::io::Error> {
+        write!(self.output, "set {} {}\n", escape_string(key), escape_string(val))
     }
 }
 
