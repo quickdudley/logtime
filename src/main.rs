@@ -53,6 +53,7 @@ fn main() {
 fn run_cmd<A: Iterator<Item=String>, S: shell::Shell>(cmd: &str, args: &mut A, db: &diesel::sqlite::SqliteConnection, shell: &mut S) {
     match cmd {
         "current" => commands::current(args, db, shell),
+        "stop" => commands::stop(args, db, shell),
         _ => { eprintln!("Unrecognised command!"); },
     }
 }

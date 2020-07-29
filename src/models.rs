@@ -1,4 +1,4 @@
-// use std::time::SystemTime;
+use std::time::SystemTime;
 
 use diesel::sqlite::{Sqlite, SqliteConnection};
 use diesel::{QueryDsl, RunQueryDsl, ExpressionMethods};
@@ -97,6 +97,16 @@ impl Project {
 }
 
 impl Task {
+    pub fn code(&self, conn: &SqliteConnection) -> String {
+        use schema::projects::dsl;
+        let project_code = dsl::projects.filter(dsl::id.eq(self.project_id))
+            .select(dsl::code)
+            .get_result::<String>(conn)
+            .ok()
+            .unwrap_or_else(|| String::from("????"));
+        format!("{}-{}", project_code, self.number)
+    }
+
     pub fn subtasks(&self, conn: &SqliteConnection) -> Result<Vec<Subtask>, diesel::result::Error> {
         use super::schema::subtasks::dsl;
         dsl::subtasks.filter(dsl::task_id.eq(self.id))
@@ -141,6 +151,14 @@ impl Stretch {
         current_stretch_scope(dsl::stretches)
             .get_result::<Stretch>(conn)
             .ok()
+    }
+
+    pub fn stop_all(conn: &SqliteConnection) {
+        use schema::stretches::dsl;
+        diesel::update(current_stretch_scope(dsl::stretches))
+            .set(dsl::end.eq(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64))
+            .execute(conn)
+            .unwrap();
     }
 }
 
