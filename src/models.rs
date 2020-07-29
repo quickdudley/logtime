@@ -1,11 +1,12 @@
 // use std::time::SystemTime;
 
-use diesel::sqlite::SqliteConnection;
+use diesel::sqlite::{Sqlite, SqliteConnection};
 use diesel::{QueryDsl, RunQueryDsl, ExpressionMethods};
 use chrono::DateTime;
 use chrono::offset::TimeZone;
 use chrono_tz::Tz;
 use chrono_tz::Pacific::Auckland;
+use super::schema;
 
 #[derive(Queryable)]
 pub struct Project {
@@ -117,4 +118,34 @@ impl Task {
             }
         }
     }
+
+    pub fn current(conn: &SqliteConnection) -> Option<Self> {
+        use schema::tasks::dsl;
+        let q = 
+        current_stretch_scope(
+            dsl::tasks.inner_join(
+                schema::subtasks::dsl::subtasks
+                .inner_join(schema::stretches::dsl::stretches)
+            )).order(schema::stretches::dsl::start.desc())
+            .select(schema::tasks::all_columns);
+        println!("{}", diesel::query_builder::debug_query::<Sqlite, _>(&q));
+        q
+            .get_result::<Self>(conn)
+            .ok()
+    }
 }
+
+impl Stretch {
+    pub fn current(conn: &SqliteConnection) -> Option<Self> {
+        use schema::stretches::dsl;
+        current_stretch_scope(dsl::stretches)
+            .get_result::<Stretch>(conn)
+            .ok()
+    }
+}
+
+fn current_stretch_scope<'a, S: diesel::query_dsl::methods::FilterDsl<diesel::expression::operators::IsNull<schema::stretches::columns::end>>>(scope: S) -> <S as diesel::query_dsl::filter_dsl::FilterDsl<diesel::expression::operators::IsNull<schema::stretches::columns::end>>>::Output {
+    use super::schema::stretches::dsl;
+    scope.filter(dsl::end.is_null())
+}
+

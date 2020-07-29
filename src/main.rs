@@ -4,6 +4,7 @@ mod schema;
 mod models;
 mod logtimedb;
 mod shell;
+mod commands;
 
 use std::fs::File;
 use shell::fish::Fish;
@@ -13,6 +14,7 @@ fn main() {
     let mut dbspec = None;
     let mut shell_out = Vec::new();
     let mut cmd = None;
+    args.next();
     while let Some(arg) = args.next() {
         match arg.as_ref() {
             "--fish" => {
@@ -40,7 +42,7 @@ fn main() {
                 None => logtimedb::open_default().unwrap(),
                 Some(path) => logtimedb::open(path).unwrap(),
             };
-            run_cmd(cmd.as_ref(), &mut args, database, &mut shell_out);
+            run_cmd(cmd.as_ref(), &mut args, &database, &mut shell_out);
         },
         None => {
             eprintln!("Usage: logtime [--fish <filename>] [--db <filename>] <command> <command args>");
@@ -48,6 +50,10 @@ fn main() {
     }
 }
 
-fn run_cmd<A: Iterator<Item=String>, S: shell::Shell>(cmd: &str, args: &mut A, db: diesel::sqlite::SqliteConnection, shell: &mut S) {
+fn run_cmd<A: Iterator<Item=String>, S: shell::Shell>(cmd: &str, args: &mut A, db: &diesel::sqlite::SqliteConnection, shell: &mut S) {
+    match cmd {
+        "current" => commands::current(args, db, shell),
+        _ => { eprintln!("Unrecognised command!"); },
+    }
 }
 
