@@ -29,7 +29,6 @@ const ENCODE_DIRECT_BASE: char = '\u{F600}';
 const ENCODE_DIRECT_CAP: char = '\u{F700}';
 
 fn escape_string(raw: &str) -> String {
-    use std::convert::TryFrom;
     let mut need_escape = false;
     let mut need_complex_escape = false;
     if raw.len() == 0 {

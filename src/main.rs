@@ -12,6 +12,7 @@ fn main() {
     let mut args = std::env::args();
     let mut dbspec = None;
     let mut shell_out = Vec::new();
+    let mut cmd = None;
     while let Some(arg) = args.next() {
         match arg.as_ref() {
             "--fish" => {
@@ -27,11 +28,26 @@ fn main() {
                     .expect("--db requires sqlite database file location");
                 dbspec = Some(path);
             },
-            _ => { break; },
+            arg => {
+                cmd = Some(arg.to_owned());
+                break;
+            },
         }
     }
-    let database = match dbspec {
-        None => logtimedb::open_default().unwrap(),
-        Some(path) => logtimedb::open(path).unwrap(),
-    };
+    match cmd {
+        Some(cmd) => {
+            let database = match dbspec {
+                None => logtimedb::open_default().unwrap(),
+                Some(path) => logtimedb::open(path).unwrap(),
+            };
+            run_cmd(cmd.as_ref(), &mut args, database, &mut shell_out);
+        },
+        None => {
+            eprintln!("Usage: logtime [--fish <filename>] [--db <filename>] <command> <command args>");
+        }
+    }
 }
+
+fn run_cmd<A: Iterator<Item=String>, S: shell::Shell>(cmd: &str, args: &mut A, db: diesel::sqlite::SqliteConnection, shell: &mut S) {
+}
+
