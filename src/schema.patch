@@ -1,8 +1,8 @@
 diff --git a/src/schema.rs b/src/schema.rs
-index defc0d4..f956ec3 100644
+index f16ce4b..9e88073 100644
 --- a/src/schema.rs
 +++ b/src/schema.rs
-@@ -1,40 +1,40 @@
+@@ -1,41 +1,41 @@
  table! {
      projects (id) {
 -        id -> Integer,
@@ -35,7 +35,9 @@ index defc0d4..f956ec3 100644
          branch -> Nullable<Text>,
          description -> Nullable<Text>,
 -        active -> Integer,
+-        number -> Integer,
 +        active -> Bool,
++        number -> BigInt,
      }
  }
  

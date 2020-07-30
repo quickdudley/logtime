@@ -12,3 +12,9 @@ pub fn current<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteCo
 pub fn stop<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteConnection, shell: &mut S) {
     models::Stretch::stop_all(conn);
 }
+
+pub fn start<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteConnection, shell: &mut S) {
+    SqliteConnection::immediate_transaction(conn, || {
+        models::Stretch::stop_all(conn);
+    })
+}

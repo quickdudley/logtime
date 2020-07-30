@@ -23,6 +23,7 @@ table! {
         branch -> Nullable<Text>,
         description -> Nullable<Text>,
         active -> Bool,
+        number -> BigInt,
     }
 }
 

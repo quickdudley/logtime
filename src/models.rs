@@ -1,7 +1,7 @@
 use std::time::SystemTime;
 
 use diesel::sqlite::{Sqlite, SqliteConnection};
-use diesel::{QueryDsl, RunQueryDsl, ExpressionMethods};
+use diesel::{Connection, QueryDsl, RunQueryDsl, ExpressionMethods};
 use chrono::DateTime;
 use chrono::offset::TimeZone;
 use chrono_tz::Tz;
@@ -43,6 +43,7 @@ pub struct Subtask {
     pub branch: Option<String>,
     pub description: Option<String>,
     pub active: bool,
+    pub number: i64,
 }
 
 #[derive(Queryable)]
@@ -51,6 +52,12 @@ pub struct Task {
     pub project_id: i64,
     pub number: i64,
     pub active_subtask: Option<i64>,
+}
+
+pub struct SubtaskSpec {
+    pub project_code: String,
+    pub task_number: i64,
+    pub subtask_number: Option<i64>,
 }
 
 pub fn get_project<'a>(conn: &SqliteConnection, code: &'a str) -> Result<Project, diesel::result::Error> {
@@ -64,7 +71,7 @@ pub fn get_project<'a>(conn: &SqliteConnection, code: &'a str) -> Result<Project
     let new_project = NewProject {
         code: code,
     };
-    SqliteConnection::immediate_transaction(conn, || {
+    SqliteConnection::transaction(conn, || {
         loop {
             let project = dsl::projects.filter(dsl::code.eq(code))
                 .limit(1)
@@ -88,11 +95,29 @@ impl Project {
     }
 
     pub fn task(&self, conn: &SqliteConnection, number: i64) -> Result<Task, diesel::result::Error> {
-        use super::schema::tasks::dsl;
-        dsl::tasks
-            .filter(dsl::project_id.eq(self.id))
-            .filter(dsl::number.eq(number))
-            .get_result::<Task>(conn)
+        use schema::tasks::dsl;
+        use schema::tasks;
+        #[derive(Insertable)]
+        #[table_name="tasks"]
+        struct NewTask {
+            project_id: i64,
+            number: i64,
+        }
+        SqliteConnection::transaction(conn, || loop {
+            let task = dsl::tasks
+                .filter(dsl::project_id.eq(self.id))
+                .filter(dsl::number.eq(number))
+                .get_result::<Task>(conn);
+            match task {
+                Err(diesel::result::Error::NotFound) => {},
+                _ => break task
+            }
+            diesel::insert_into(tasks::table)
+                .values(&NewTask {
+                    project_id: self.id,
+                    number: number,
+                }).execute(conn)?;
+        })
     }
 }
 
@@ -142,6 +167,35 @@ impl Task {
         q
             .get_result::<Self>(conn)
             .ok()
+    }
+}
+
+impl std::str::FromStr for SubtaskSpec {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.split('-');
+        Ok(SubtaskSpec {
+            project_code: split.next()
+                .ok_or_else(|| String::from("Failed to parse code"))
+                .map(String::from)?,
+            task_number: split.next()
+                .ok_or_else(|| String::from("Missing task number"))
+                .and_then(|part| part.parse().map_err(|e| format!("{}", e)))?,
+            subtask_number: split.next()
+                .map(|part| part.parse().map_err(|e| format!("{}",e)))
+                .transpose()?,
+        })
+    }
+}
+
+impl Subtask {
+    pub fn for_code(conn: &SqliteConnection, code: &str) -> Result<(Project,Task,Self), String> {
+        let spec: SubtaskSpec = code.parse()?;
+        SqliteConnection::transaction(conn, || {
+            let project = get_project(conn, spec.project_code.as_ref())?;
+            let task = project.task(conn, spec.task_number)?;
+            todo!()
+        }).map_err(|e: diesel::result::Error| format!("{}", e))
     }
 }
 
