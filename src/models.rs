@@ -1,7 +1,8 @@
 use std::time::SystemTime;
 
-use diesel::sqlite::{Sqlite, SqliteConnection};
-use diesel::{Connection, QueryDsl, RunQueryDsl, ExpressionMethods};
+use diesel::sqlite::SqliteConnection;
+use diesel::{Connection, QueryDsl, RunQueryDsl,
+    ExpressionMethods};
 use chrono::DateTime;
 use chrono::offset::TimeZone;
 use chrono_tz::Tz;
@@ -154,17 +155,64 @@ impl Task {
         }
     }
 
+    pub fn latest_subtask(&self, conn: &SqliteConnection) -> Result<Subtask, diesel::result::Error> {
+        use schema::subtasks::dsl;
+        SqliteConnection::transaction(conn, || {
+            let my_subtasks = dsl::subtasks
+                .filter(dsl::task_id.eq(self.id));
+            let latest_number = my_subtasks
+                .select(diesel::dsl::max(dsl::number))
+                .get_result::<Option<i64>>(conn)
+                .and_then(|n| n.ok_or(diesel::result::Error::NotFound))
+                .or_else(|e| match e {
+                    diesel::result::Error::NotFound => Ok(1),
+                    _ => Err(e),
+                })?;
+            self.load_or_create_subtask(conn, latest_number)
+        })
+    }
+
+    pub fn load_or_create_subtask(&self, conn: &SqliteConnection, number: i64) -> Result<Subtask, diesel::result::Error> {
+        use schema::subtasks;
+        SqliteConnection::transaction(conn, || {
+            self.subtask(conn, number).or_else(|e| match e {
+                diesel::result::Error::NotFound => {
+                    #[derive(Insertable)]
+                    #[table_name="subtasks"]
+                    struct NewSubtask {
+                        task_id: i64,
+                        active: bool,
+                        number: i64,
+                    }
+                    diesel::insert_into(subtasks::table)
+                        .values(&NewSubtask {
+                            task_id: self.id,
+                            active: true,
+                            number: number,
+                        }).execute(conn)?;
+                    self.subtask(conn, number)
+                },
+                _ => Err(e),
+            })
+        })
+    }
+
+    pub fn subtask(&self, conn: &SqliteConnection, number: i64) -> Result<Subtask, diesel::result::Error> {
+        use schema::subtasks::dsl;
+        dsl::subtasks
+            .filter(dsl::task_id.eq(self.id))
+            .filter(dsl::number.eq(number))
+            .get_result::<Subtask>(conn)
+    }
+
     pub fn current(conn: &SqliteConnection) -> Option<Self> {
         use schema::tasks::dsl;
-        let q = 
         current_stretch_scope(
             dsl::tasks.inner_join(
                 schema::subtasks::dsl::subtasks
                 .inner_join(schema::stretches::dsl::stretches)
             )).order(schema::stretches::dsl::start.desc())
-            .select(schema::tasks::all_columns);
-        println!("{}", diesel::query_builder::debug_query::<Sqlite, _>(&q));
-        q
+            .select(schema::tasks::all_columns)
             .get_result::<Self>(conn)
             .ok()
     }
@@ -189,13 +237,35 @@ impl std::str::FromStr for SubtaskSpec {
 }
 
 impl Subtask {
-    pub fn for_code(conn: &SqliteConnection, code: &str) -> Result<(Project,Task,Self), String> {
+    pub fn for_code(conn: &SqliteConnection, code: &str) -> Result<(Project,Task,Subtask), DbOrMiscError> {
         let spec: SubtaskSpec = code.parse()?;
         SqliteConnection::transaction(conn, || {
             let project = get_project(conn, spec.project_code.as_ref())?;
             let task = project.task(conn, spec.task_number)?;
-            todo!()
-        }).map_err(|e: diesel::result::Error| format!("{}", e))
+            let subtask = match spec.subtask_number {
+                Some(number) => task.load_or_create_subtask(conn, number),
+                None => task.latest_subtask(conn),
+            }?;
+            Ok((project,task,subtask))
+        })
+    }
+
+    pub fn begin(&self, conn: &SqliteConnection) -> Result<(), DbOrMiscError> {
+        use schema::stretches;
+        #[derive(Insertable)]
+        #[table_name="stretches"]
+        struct NewStretch {
+            subtask_id: i64,
+            start: i64,
+        }
+        diesel::insert_into(stretches::table)
+            .values(&NewStretch {
+                subtask_id: self.id,
+                start: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64
+            })
+            .execute(conn)
+            .map(|_| ())
+            .map_err(std::convert::From::from)
     }
 }
 
@@ -207,12 +277,12 @@ impl Stretch {
             .ok()
     }
 
-    pub fn stop_all(conn: &SqliteConnection) {
+    pub fn stop_all(conn: &SqliteConnection) -> Result<(), diesel::result::Error> {
         use schema::stretches::dsl;
         diesel::update(current_stretch_scope(dsl::stretches))
             .set(dsl::end.eq(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64))
             .execute(conn)
-            .unwrap();
+            .map(|_| ())
     }
 }
 
@@ -221,3 +291,35 @@ fn current_stretch_scope<'a, S: diesel::query_dsl::methods::FilterDsl<diesel::ex
     scope.filter(dsl::end.is_null())
 }
 
+#[derive(Debug)]
+pub enum DbOrMiscError {
+    Db(diesel::result::Error),
+    Str(String),
+}
+
+impl std::convert::From<diesel::result::Error> for DbOrMiscError {
+    fn from(err: diesel::result::Error) -> Self {
+        Self::Db(err)
+    }
+}
+
+impl std::convert::From<String> for DbOrMiscError {
+    fn from(err: String) -> Self {
+        Self::Str(err)
+    }
+}
+
+impl std::convert::From<&str> for DbOrMiscError {
+    fn from(err: &str) -> Self {
+        <Self as std::convert::From<String>>::from(String::from(err))
+    }
+}
+
+impl std::fmt::Display for DbOrMiscError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Db(err) => std::fmt::Display::fmt(err, f),
+            Self::Str(err) => std::fmt::Display::fmt(err, f),
+        }
+    }
+}
