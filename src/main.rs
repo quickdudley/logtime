@@ -64,6 +64,7 @@ fn run_cmd<A: Iterator<Item=String>, S: shell::Shell>(cmd: &str, args: &mut A, d
         "current" => commands::current(args, db, shell),
         "start" => commands::start(args, db, shell),
         "stop" => commands::stop(args, db, shell),
+        "cd" => commands::cd(args, db, shell),
         _ => { eprintln!("Unrecognised command!"); },
     }
 }

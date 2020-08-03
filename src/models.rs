@@ -3,6 +3,7 @@ use std::time::SystemTime;
 use diesel::sqlite::SqliteConnection;
 use diesel::{Connection, QueryDsl, RunQueryDsl,
     ExpressionMethods};
+use diesel::expression_methods::BoolExpressionMethods;
 use chrono::DateTime;
 use chrono::offset::TimeZone;
 use chrono_tz::Tz;
@@ -119,6 +120,21 @@ impl Project {
                     number: number,
                 }).execute(conn)?;
         })
+    }
+    
+    pub fn current(conn: &SqliteConnection) -> Result<Self, diesel::result::Error> {
+        use schema::projects::dsl;
+        current_stretch_scope(
+            dsl::projects.inner_join(
+                schema::tasks::dsl::tasks
+                .inner_join(
+                schema::subtasks::dsl::subtasks
+                .inner_join(
+                schema::stretches::dsl::stretches
+                ))
+            )).order(schema::stretches::dsl::start.desc())
+            .select(schema::projects::all_columns)
+            .get_result::<Self>(conn)
     }
 }
 
@@ -284,11 +300,20 @@ impl Stretch {
             .execute(conn)
             .map(|_| ())
     }
+    
 }
 
 fn current_stretch_scope<'a, S: diesel::query_dsl::methods::FilterDsl<diesel::expression::operators::IsNull<schema::stretches::columns::end>>>(scope: S) -> <S as diesel::query_dsl::filter_dsl::FilterDsl<diesel::expression::operators::IsNull<schema::stretches::columns::end>>>::Output {
     use super::schema::stretches::dsl;
     scope.filter(dsl::end.is_null())
+}
+
+fn filter_stretch_date<S: diesel::query_dsl::methods::FilterDsl<diesel::expression::operators::Eq<diesel::expression::grouped::Grouped<diesel::expression::operators::Or<diesel::expression::operators::Gt<schema::stretches::columns::start, diesel::expression::bound::Bound<diesel::sql_types::BigInt, i64>>, diesel::expression::operators::Lt<schema::stretches::columns::end, diesel::expression::bound::Bound<diesel::sql_types::Nullable<diesel::sql_types::BigInt>, i64>>>>, diesel::expression::bound::Bound<diesel::sql_types::Bool, bool>>>>(scope: S, from: chrono::naive::NaiveDate, until: chrono::naive::NaiveDate) -> <S as diesel::query_dsl::filter_dsl::FilterDsl<diesel::expression::operators::Eq<diesel::expression::grouped::Grouped<diesel::expression::operators::Or<diesel::expression::operators::Gt<schema::stretches::columns::start, diesel::expression::bound::Bound<diesel::sql_types::BigInt, i64>>, diesel::expression::operators::Lt<schema::stretches::columns::end, diesel::expression::bound::Bound<diesel::sql_types::Nullable<diesel::sql_types::BigInt>, i64>>>>, diesel::expression::bound::Bound<diesel::sql_types::Bool, bool>>>>::Output
+ {
+    use super::schema::stretches::dsl;
+    let from = Auckland.from_local_datetime(&from.and_time(chrono::naive::NaiveTime::from_hms(0,0,0))).earliest().unwrap();
+    let until = Auckland.from_local_datetime(&until.succ().and_time(chrono::naive::NaiveTime::from_hms(0,0,0))).latest().unwrap();
+    scope.filter(dsl::start.gt(until.timestamp()).or(dsl::end.lt(from.timestamp())).eq(false))
 }
 
 #[derive(Debug)]

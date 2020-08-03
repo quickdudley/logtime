@@ -35,3 +35,17 @@ pub fn start<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteConn
         None => { Err(models::DbOrMiscError::from("TO-DO")) },
     }.unwrap_or_else(|e| eprintln!("{}", e));
 }
+
+pub fn cd<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteConnection, shell: &mut S) {
+    match models::Project::current(conn) {
+        Err(diesel::result::Error::NotFound) => println!("No current task"),
+        Err(err) => eprintln!("{}", err),
+        Ok(project) => {
+            match project.directory {
+                Some(dir) => shell.cd(std::path::Path::new(&dir))
+                    .map_or_else(|err| eprintln!("{}", err), |_| ()),
+                None => eprintln!("No directory set for current project")
+            }
+        },
+    }
+}
