@@ -1,4 +1,6 @@
 pub mod fish;
+pub mod zsh;
+
 use std::ops::IndexMut;
 
 pub trait Shell {

@@ -8,6 +8,7 @@ mod commands;
 
 use std::fs::File;
 use shell::fish::Fish;
+use shell::zsh::Zsh;
 
 fn main() {
     let mut args = std::env::args();
@@ -22,6 +23,14 @@ fn main() {
                     .expect("--fish requires output path");
                 match File::create(path.clone()) {
                     Ok(file) => {shell_out.push(Box::new(Fish::new(file)) as Box<dyn shell::Shell>);},
+                    Err(err) => {eprintln!("failed to open {}: {:?}", path, err);},
+                }
+            },
+            "--zsh" => {
+                let path = args.next()
+                    .expect("--zsh requires output path");
+                match File::create(path.clone()) {
+                    Ok(file) => {shell_out.push(Box::new(Zsh::new(file)) as Box<dyn shell::Shell>);},
                     Err(err) => {eprintln!("failed to open {}: {:?}", path, err);},
                 }
             },

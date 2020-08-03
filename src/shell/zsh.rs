@@ -1,10 +1,10 @@
 use std::io::Write;
 
-pub struct Fish<Output> {
+pub struct Zsh<Output> {
     output: Output,
 }
 
-impl<Output: Write> super::Shell for Fish<Output> {
+impl<Output: Write> super::Shell for Zsh<Output> {
     fn cd(&mut self, path: &std::path::Path) -> Result<(),std::io::Error> {
         write!(self.output, "cd {}\n", escape_string(path.display().to_string().as_str()))
     }
@@ -16,13 +16,13 @@ impl<Output: Write> super::Shell for Fish<Output> {
                .join(" "))
     }
     fn env(&mut self, key: &str, val: &str) -> Result<(),std::io::Error> {
-        write!(self.output, "set {} {}\n", escape_string(key), escape_string(val))
+        write!(self.output, "{}={}\n", escape_string(key), escape_string(val))
     }
 }
 
-impl<Output: Write> Fish<Output> {
+impl<Output: Write> Zsh<Output> {
     pub fn new(output: Output) -> Self {
-        Fish { output: output }
+        Zsh { output: output }
     }
 }
 
