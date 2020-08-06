@@ -121,7 +121,7 @@ impl Project {
                 }).execute(conn)?;
         })
     }
-    
+
     pub fn current(conn: &SqliteConnection) -> Result<Self, diesel::result::Error> {
         use schema::projects::dsl;
         current_stretch_scope(
@@ -293,14 +293,24 @@ impl Stretch {
             .ok()
     }
 
-    pub fn stop_all(conn: &SqliteConnection) -> Result<(), diesel::result::Error> {
+    pub fn stop_all(conn: &SqliteConnection) -> Result<(), DbOrMiscError> {
+        Self::stop_all_at(conn, None)
+    }
+
+    pub fn stop_all_at(conn: &SqliteConnection, when: Option<String>) -> Result<(), DbOrMiscError> {
         use schema::stretches::dsl;
+        let timestamp = match when {
+            None => Ok(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64),
+            Some(timestring) => Auckland.datetime_from_str(timestring.as_ref(), "%Y-%m%dT%H:%M:%S")
+                .map(|time| time.timestamp())
+                .map_err(|e| e.to_string())
+        }?;
         diesel::update(current_stretch_scope(dsl::stretches))
-            .set(dsl::end.eq(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64))
+            .set(dsl::end.eq(timestamp))
             .execute(conn)
             .map(|_| ())
+            .map_err(|e| DbOrMiscError::from(e))
     }
-    
 }
 
 fn current_stretch_scope<'a, S: diesel::query_dsl::methods::FilterDsl<diesel::expression::operators::IsNull<schema::stretches::columns::end>>>(scope: S) -> <S as diesel::query_dsl::filter_dsl::FilterDsl<diesel::expression::operators::IsNull<schema::stretches::columns::end>>>::Output {
