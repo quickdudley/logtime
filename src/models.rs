@@ -1,10 +1,13 @@
 use std::time::SystemTime;
+use std::collections::HashMap;
 
 use diesel::sqlite::SqliteConnection;
 use diesel::{Connection, QueryDsl, RunQueryDsl,
     ExpressionMethods};
 use diesel::expression_methods::BoolExpressionMethods;
 use chrono::DateTime;
+use chrono::Duration;
+use chrono::naive::NaiveDate;
 use chrono::offset::TimeZone;
 use chrono_tz::Tz;
 use chrono_tz::Pacific::Auckland;
@@ -18,6 +21,7 @@ pub struct Project {
     pub name: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct Stretch {
     pub id: i64,
     pub subtask_id: i64,
@@ -311,6 +315,100 @@ impl Stretch {
             .map(|_| ())
             .map_err(|e| DbOrMiscError::from(e))
     }
+
+   pub fn time_in_range(&self, from: DateTime<Tz>, until: DateTime<Tz>) -> Option<Duration> {
+      let from = *[from, self.start].iter().max().unwrap();
+      let until = *[until, self.end?].iter().min().unwrap();
+      if from > until {
+          None
+      } else {
+          Some(until - from)
+      }
+    }
+
+    pub fn dates(&self) -> impl Iterator<Item=NaiveDate> {
+        enum I {
+            R(NaiveDate,NaiveDate),
+            N,
+        }
+        impl Iterator for I {
+            type Item = NaiveDate;
+            fn next(&mut self) -> Option<Self::Item> {
+                match self {
+                    Self::N => None,
+                    Self::R(b,e) => {
+                        let r = *b;
+                        *self = if b == e {
+                            Self::N
+                        } else {
+                            Self::R(b.succ(), *e)
+                        };
+                        Some(r)
+                    },
+                }
+            }
+        }
+        match self.end {
+            None => I::N,
+            Some(e) => I::R(self.start.date().naive_local(), e.date().naive_local())
+        }
+    }
+}
+
+pub fn dates_to_timestamp_ranges<I: IntoIterator<Item=NaiveDate>>(source: I) -> impl Iterator<Item=core::ops::Range<DateTime<Tz>>> {
+    source.into_iter().map(|d| {
+        let until = Auckland.from_local_datetime(&d.succ().and_hms(0,0,0))
+            .earliest()
+            .unwrap();
+        let from = Auckland.from_local_datetime(&d.and_hms(0,0,0))
+            .latest()
+            .unwrap();
+        from .. until
+    })
+}
+
+pub fn today() -> NaiveDate {
+    Auckland
+        .from_utc_datetime(&chrono::offset::Utc::now().naive_utc())
+        .date()
+        .naive_local()
+}
+
+pub fn time_since(conn: &SqliteConnection, from: NaiveDate) -> Result<HashMap<NaiveDate, HashMap<String, Duration>>, DbOrMiscError> {
+    let mut result = HashMap::new();
+    let today = today();
+    for (project, task, subtask, stretch) in filter_stretch_date(schema::projects::dsl::projects
+        .inner_join(
+            schema::tasks::dsl::tasks
+            .inner_join(
+            schema::subtasks::dsl::subtasks
+            .inner_join(
+            schema::stretches::dsl::stretches
+            ))
+        ), from, today)
+        .select((
+                schema::projects::all_columns,
+                schema::tasks::all_columns,
+                schema::subtasks::all_columns,
+                schema::stretches::all_columns
+        )).load::<(Project,Task,Subtask,Stretch)>(conn)? {
+        let code = format!("{}-{}-{}", project.code, task.number, subtask.number);
+        for date in stretch.dates() {
+            if date >= from && date <= today {
+                let morning = Auckland.from_local_datetime(&date.and_hms(0,0,0)).earliest().unwrap();
+                let night = Auckland.from_local_datetime(&date.succ().and_hms(0,0,0)).latest().unwrap();
+                let duration = stretch.time_in_range(morning, night).unwrap();
+                result.entry(date)
+                    .or_insert_with(HashMap::new)
+                    .entry(code.clone())
+                    .and_modify(|d| {
+                        *d = *d + duration
+                    })
+                    .or_insert(duration);
+            }
+        }
+    }
+    Ok(result)
 }
 
 fn current_stretch_scope<'a, S: diesel::query_dsl::methods::FilterDsl<diesel::expression::operators::IsNull<schema::stretches::columns::end>>>(scope: S) -> <S as diesel::query_dsl::filter_dsl::FilterDsl<diesel::expression::operators::IsNull<schema::stretches::columns::end>>>::Output {

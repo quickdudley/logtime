@@ -10,8 +10,8 @@ pub fn current<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteCo
     }
 }
 
-pub fn stop<A: Iterator<Item=String>, S: Shell>(_args: &mut A, conn: &SqliteConnection, shell: &mut S) {
-    models::Stretch::stop_all(conn)
+pub fn stop<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteConnection, shell: &mut S) {
+    models::Stretch::stop_all_at(conn, args.next())
         .unwrap_or_else(|e| eprintln!("{}", e));
 }
 
@@ -49,3 +49,23 @@ pub fn cd<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteConnect
         },
     }
 }
+
+pub fn display<A: Iterator<Item=String>, S: Shell>(args: &mut A, conn: &SqliteConnection, shell: &mut S) {
+    let from = match args.next() {
+        None => models::today(),
+        Some(formatted) => chrono::naive::NaiveDate::parse_from_str(formatted.as_ref(), "%Y-%m-%d").unwrap(),
+    };
+    let time_hash = models::time_since(conn, from).unwrap();
+    let mut entries = time_hash.iter().collect::<Vec<_>>();
+    entries.sort_by(|(c1,_),(c2,_)| c1.cmp(c2));
+    for (date, entries) in entries {
+        println!("{}:", date.format("%Y-%m-%d"));
+        for (code, duration) in entries.iter() {
+            println!("  {}: {}:{}:{}", code,
+                     duration.num_hours(),
+                     duration.num_minutes() % 60,
+                     duration.num_seconds() & 60);
+        }
+    }
+}
+
