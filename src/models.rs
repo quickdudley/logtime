@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::time::SystemTime;
 use std::collections::HashMap;
 
@@ -36,8 +37,8 @@ impl diesel::deserialize::Queryable<super::schema::stretches::SqlType, diesel::s
         Stretch {
             id: row.0,
             subtask_id: row.1,
-            start: Auckland.timestamp(row.2, 0),
-            end: row.3.map(|ts| Auckland.timestamp(ts, 0))
+            start: current_timezone().timestamp(row.2, 0),
+            end: row.3.map(|ts| current_timezone().timestamp(ts, 0))
         }
     }
 }
@@ -305,7 +306,7 @@ impl Stretch {
         use schema::stretches::dsl;
         let timestamp = match when {
             None => Ok(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64),
-            Some(timestring) => Auckland.datetime_from_str(timestring.as_ref(), "%Y-%m%dT%H:%M:%S")
+            Some(timestring) => current_timezone().datetime_from_str(timestring.as_ref(), "%Y-%m%dT%H:%M:%S")
                 .map(|time| time.timestamp())
                 .map_err(|e| e.to_string())
         }?;
@@ -357,10 +358,10 @@ impl Stretch {
 
 pub fn dates_to_timestamp_ranges<I: IntoIterator<Item=NaiveDate>>(source: I) -> impl Iterator<Item=core::ops::Range<DateTime<Tz>>> {
     source.into_iter().map(|d| {
-        let until = Auckland.from_local_datetime(&d.succ().and_hms(0,0,0))
+        let until = current_timezone().from_local_datetime(&d.succ().and_hms(0,0,0))
             .earliest()
             .unwrap();
-        let from = Auckland.from_local_datetime(&d.and_hms(0,0,0))
+        let from = current_timezone().from_local_datetime(&d.and_hms(0,0,0))
             .latest()
             .unwrap();
         from .. until
@@ -368,7 +369,7 @@ pub fn dates_to_timestamp_ranges<I: IntoIterator<Item=NaiveDate>>(source: I) -> 
 }
 
 pub fn today() -> NaiveDate {
-    Auckland
+    current_timezone()
         .from_utc_datetime(&chrono::offset::Utc::now().naive_utc())
         .date()
         .naive_local()
@@ -395,8 +396,8 @@ pub fn time_since(conn: &SqliteConnection, from: NaiveDate) -> Result<HashMap<Na
         let code = format!("{}-{}-{}", project.code, task.number, subtask.number);
         for date in stretch.dates() {
             if date >= from && date <= today {
-                let morning = Auckland.from_local_datetime(&date.and_hms(0,0,0)).earliest().unwrap();
-                let night = Auckland.from_local_datetime(&date.succ().and_hms(0,0,0)).latest().unwrap();
+                let morning = current_timezone().from_local_datetime(&date.and_hms(0,0,0)).earliest().unwrap();
+                let night = current_timezone().from_local_datetime(&date.succ().and_hms(0,0,0)).latest().unwrap();
                 let duration = stretch.time_in_range(morning, night).unwrap();
                 result.entry(date)
                     .or_insert_with(HashMap::new)
@@ -419,9 +420,16 @@ fn current_stretch_scope<'a, S: diesel::query_dsl::methods::FilterDsl<diesel::ex
 fn filter_stretch_date<S: diesel::query_dsl::methods::FilterDsl<diesel::expression::operators::Eq<diesel::expression::grouped::Grouped<diesel::expression::operators::Or<diesel::expression::operators::Gt<schema::stretches::columns::start, diesel::expression::bound::Bound<diesel::sql_types::BigInt, i64>>, diesel::expression::operators::Lt<schema::stretches::columns::end, diesel::expression::bound::Bound<diesel::sql_types::Nullable<diesel::sql_types::BigInt>, i64>>>>, diesel::expression::bound::Bound<diesel::sql_types::Bool, bool>>>>(scope: S, from: chrono::naive::NaiveDate, until: chrono::naive::NaiveDate) -> <S as diesel::query_dsl::filter_dsl::FilterDsl<diesel::expression::operators::Eq<diesel::expression::grouped::Grouped<diesel::expression::operators::Or<diesel::expression::operators::Gt<schema::stretches::columns::start, diesel::expression::bound::Bound<diesel::sql_types::BigInt, i64>>, diesel::expression::operators::Lt<schema::stretches::columns::end, diesel::expression::bound::Bound<diesel::sql_types::Nullable<diesel::sql_types::BigInt>, i64>>>>, diesel::expression::bound::Bound<diesel::sql_types::Bool, bool>>>>::Output
  {
     use super::schema::stretches::dsl;
-    let from = Auckland.from_local_datetime(&from.and_time(chrono::naive::NaiveTime::from_hms(0,0,0))).earliest().unwrap();
-    let until = Auckland.from_local_datetime(&until.succ().and_time(chrono::naive::NaiveTime::from_hms(0,0,0))).latest().unwrap();
+    let from = current_timezone().from_local_datetime(&from.and_time(chrono::naive::NaiveTime::from_hms(0,0,0))).earliest().unwrap();
+    let until = current_timezone().from_local_datetime(&until.succ().and_time(chrono::naive::NaiveTime::from_hms(0,0,0))).latest().unwrap();
     scope.filter(dsl::start.gt(until.timestamp()).or(dsl::end.lt(from.timestamp())).eq(false))
+}
+
+fn current_timezone() -> Tz {
+    match std::env::var("LOGTIME_TZ").ok().and_then(|tzs| Tz::from_str(tzs.as_ref()).ok()) {
+        None => Auckland,
+        Some(tz) => tz,
+    }
 }
 
 #[derive(Debug)]
