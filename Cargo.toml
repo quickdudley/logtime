@@ -1,14 +1,14 @@
 [package]
 name = "logtime"
-version = "0.1.0"
-authors = ["Jeremy List <jeremy.list@youdo.co.nz>"]
+version = "0.1.1"
+authors = ["Jeremy List <quick.dudley@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4.13"
-chrono-tz = "0.5"
-diesel = { version = "1.4.4", features = ["sqlite"] }
+chrono = "0.4.19"
+chrono-tz = "0.6"
+diesel = { version = "1.4.8", features = ["sqlite"] }
 diesel_migrations = "1.4.0"
 
