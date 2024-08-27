@@ -7,8 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4.19"
-chrono-tz = "0.6"
-diesel = { version = "1.4.8", features = ["sqlite"] }
-diesel_migrations = "1.4.0"
+chrono = "0.4"
+chrono-tz = "0.9"
+diesel = { version = "2.2", features = ["sqlite"] }
+diesel_migrations = "2.2"
 
